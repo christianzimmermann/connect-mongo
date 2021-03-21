@@ -75,11 +75,12 @@ type InternalSessionType = {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
-const noop = () => {}
+const noop = () => {
+}
 const unit: <T>(a: T) => T = (a) => a
 
 function defaultSerializeFunction(
-  session: session.SessionData
+  session: session.SessionData,
 ): session.SessionData {
   // Copy each property of the session to a new object
   const obj = {}
@@ -91,7 +92,7 @@ function defaultSerializeFunction(
       // @ts-ignore FIXME:
       obj.cookie = session.cookie.toJSON
         ? // @ts-ignore FIXME:
-          session.cookie.toJSON()
+        session.cookie.toJSON()
         : session.cookie
     } else {
       // @ts-ignore FIXME:
@@ -136,16 +137,16 @@ export default class MongoStore extends session.Store {
   }
 
   constructor({
-    collectionName = 'sessions',
-    ttl = 1209600,
-    mongoOptions = { useUnifiedTopology: true },
-    autoRemove = 'native',
-    autoRemoveInterval = 10,
-    touchAfter = 0,
-    stringify = true,
-    crypto,
-    ...required
-  }: ConnectMongoOptions) {
+                collectionName = 'sessions',
+                ttl = 1209600,
+                mongoOptions = { useUnifiedTopology: true },
+                autoRemove = 'native',
+                autoRemoveInterval = 10,
+                touchAfter = 0,
+                stringify = true,
+                crypto,
+                ...required
+              }: ConnectMongoOptions) {
     super()
     debug('create MongoStore instance')
     const options: ConcretConnectMongoOptions = {
@@ -173,16 +174,16 @@ export default class MongoStore extends session.Store {
     // Check params
     assert(
       options.mongoUrl || options.clientPromise || options.client,
-      'You must provide either mongoUrl|clientPromise|client in options'
+      'You must provide either mongoUrl|clientPromise|client in options',
     )
     assert(
       options.createAutoRemoveIdx === null ||
-        options.createAutoRemoveIdx === undefined,
-      'options.createAutoRemoveIdx has been reverted to autoRemove and autoRemoveInterval'
+      options.createAutoRemoveIdx === undefined,
+      'options.createAutoRemoveIdx has been reverted to autoRemove and autoRemoveInterval',
     )
     assert(
       !options.autoRemoveInterval || options.autoRemoveInterval <= 71582,
-      /* (Math.pow(2, 32) - 1) / (1000 * 60) */ 'autoRemoveInterval is too large. options.autoRemoveInterval is in minutes but not seconds nor mills'
+      /* (Math.pow(2, 32) - 1) / (1000 * 60) */ 'autoRemoveInterval is too large. options.autoRemoveInterval is in minutes but not seconds nor mills',
     )
     this.transformFunctions = computeTransformFunctions(options)
     let _clientP: Promise<MongoClient>
@@ -225,7 +226,7 @@ export default class MongoStore extends session.Store {
         debug('Creating MongoDB TTL index')
         collection.createIndex(
           { expires: 1 },
-          { expireAfterSeconds: 0, ...this.options.writeOperationOptions }
+          { expireAfterSeconds: 0, ...this.options.writeOperationOptions },
         )
         break
       case 'interval':
@@ -237,7 +238,7 @@ export default class MongoStore extends session.Store {
               w: 0,
               j: false,
             }),
-          this.options.autoRemoveInterval * 1000 * 60
+          this.options.autoRemoveInterval * 1000 * 60,
         )
         this.timer.unref()
         break
@@ -263,7 +264,7 @@ export default class MongoStore extends session.Store {
    */
   get(
     sid: string,
-    callback: (err: any, session?: session.SessionData | null) => void
+    callback: (err: any, session?: session.SessionData | null) => void,
   ): void {
     ;(async () => {
       try {
@@ -281,7 +282,7 @@ export default class MongoStore extends session.Store {
           try {
             const plaintext = await cryptoGet(
               this.options.crypto.secret as string,
-              session.session
+              session.session,
             ).catch((err) => {
               throw new Error(err)
             })
@@ -312,7 +313,7 @@ export default class MongoStore extends session.Store {
   set(
     sid: string,
     session: session.SessionData,
-    callback: (err: any) => void = noop
+    callback: (err: any) => void = noop,
   ): void {
     ;(async () => {
       try {
@@ -349,7 +350,7 @@ export default class MongoStore extends session.Store {
           try {
             const data = await cryptoSet(
               this.options.crypto.secret as string,
-              s.session
+              s.session,
             ).catch((err) => {
               throw new Error(err)
             })
@@ -365,7 +366,7 @@ export default class MongoStore extends session.Store {
           {
             upsert: true,
             ...this.options.writeOperationOptions,
-          }
+          },
         )
         if (rawResp.upsertedCount > 0) {
           this.emit('create', sid)
@@ -383,7 +384,7 @@ export default class MongoStore extends session.Store {
   touch(
     sid: string,
     session: session.SessionData & { lastModified?: Date },
-    callback: (err: any) => void = noop
+    callback: (err: any) => void = noop,
   ): void {
     ;(async () => {
       try {
@@ -420,7 +421,7 @@ export default class MongoStore extends session.Store {
         const rawResp = await collection.updateOne(
           { _id: this.computeStorageId(sid) },
           { $set: updateFields },
-          this.options.writeOperationOptions
+          this.options.writeOperationOptions,
         )
         if (rawResp.matchedCount === 0) {
           return callback(new Error('Unable to find the session to touch'))
@@ -443,8 +444,8 @@ export default class MongoStore extends session.Store {
       obj?:
         | session.SessionData[]
         | { [sid: string]: session.SessionData }
-        | null
-    ) => void
+        | null,
+    ) => void,
   ): void {
     ;(async () => {
       try {
@@ -457,19 +458,35 @@ export default class MongoStore extends session.Store {
           ],
         })
         const results: session.SessionData[] = []
-        sessions.forEach(
-          (session) => {
-            results.push(this.transformFunctions.unserialize(session.session))
-          },
-          (err) => {
-            if (err) {
-              callback(err)
-            } else {
-              this.emit('all', results)
-              callback(null, results)
-            }
-          }
-        )
+
+        if (this.crypto) {
+          const cryptoGet = util_1.default.promisify(this.crypto.get).bind(this.crypto);
+          const promises = []
+          sessions.forEach((session) => {
+            promises.push(cryptoGet(this.options.crypto.secret, session.session))
+          })
+
+          Promise.all(promises).then((values) => {
+            console.log(values)
+          })
+
+        } else {
+          sessions.forEach(
+            (session) => {
+              results.push(this.transformFunctions.unserialize(session.session))
+            },
+            (err) => {
+              if (err) {
+                callback(err)
+              } else {
+                this.emit('all', results)
+                callback(null, results)
+              }
+            },
+          )
+        }
+
+
       } catch (error) {
         callback(error)
       }
@@ -486,8 +503,8 @@ export default class MongoStore extends session.Store {
       .then((colleciton) =>
         colleciton.deleteOne(
           { _id: this.computeStorageId(sid) },
-          this.options.writeOperationOptions
-        )
+          this.options.writeOperationOptions,
+        ),
       )
       .then(() => {
         this.emit('destroy', sid)
